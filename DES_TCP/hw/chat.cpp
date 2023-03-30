@@ -580,7 +580,7 @@ void loadkey(){
     char buff[1000];
     char tempbuff[1000];
     while (infile.getline(tempbuff, 1000)) {
-        std::cout << "正在读取...." << std::endl;
+        //std::cout << "正在读取...." << std::endl;
         for (int i = 0; i < 1000; i++) {
             if (tempbuff[i] != '\0') {
                 buff[i] = tempbuff[i];
@@ -838,7 +838,8 @@ std::string DecryptForTCP(std::string s){
     return ret;
 }
 
-
+std::string oppo_ip;
+int oppo_port;
 
 int serv_sock;
 bool quit=false;
@@ -871,13 +872,15 @@ void *pthread_send_server(void* arg){
     char buffer[7500];
     Node_server*node = (Node_server*)arg;
     while(true){
+        if(quit){
+            break;
+        }
         std::cin.getline(buffer,900);
         //getchar();
         std::string s = buffer;
         std::string fin = "quit";
         if(s.find(fin)!=std::string::npos){
             quit=true;
-            break;
         }
         if(s.size()>900){
             std::cout<<"输入过长，请重新输入"<<std::endl;
@@ -892,7 +895,7 @@ void *pthread_send_server(void* arg){
             std::cout<<"发送失败"<<std::endl;
             //std::cout<<errno<<std::endl;
         }else{
-            std::cout<<"发送成功"<<std::endl;
+            //std::cout<<"发送成功"<<std::endl;
         }
         memset(buffer,0,7500);
     }
@@ -908,7 +911,13 @@ void *pthread_recv_server(void* arg){
         if(ret>0){
             std::string s = buffer;
             //std::cout<<s<<std::endl;
+            printf("Recv a Message from %s:%d ", oppo_ip.c_str(), oppo_port);
             s = DecryptForTCP(s);
+            std::string fin = "quit";
+            if(s.find(fin)!=std::string::npos){
+            std::cout<<"recv quit"<<std::endl;
+            quit=true;
+        }
             std::cout<<s<<std::endl;
         }
         memset(buffer,0,7500);
@@ -926,6 +935,19 @@ void *pthread_accept(void *arg){
     //accpet
     int acceptedFd = accept(serv_sock, (sockaddr *)&clientSock, &clientLen);
     std::cout<<"成功连接客户端"<<std::endl;
+
+    struct sockaddr_in listendAddr;
+    int listendAddrLen;
+    listendAddrLen = sizeof(listendAddr);
+    if(getsockname(acceptedFd, (struct sockaddr *)&listendAddr, (socklen_t *)&listendAddrLen) == -1){
+        printf("getsockname error\n");
+    exit(0);
+    }
+    printf("client`s address = %s:%d\n", inet_ntoa(listendAddr.sin_addr), ntohs(listendAddr.sin_port));
+    oppo_ip = inet_ntoa(listendAddr.sin_addr);
+    oppo_port = ntohs(listendAddr.sin_port);
+
+    
     Node_server* node=new Node_server();
     node->client = clientSock;
     node->fd = acceptedFd;
@@ -994,12 +1016,15 @@ void *pthread_send(void* arg){
     char buffer[7500];
     Node*node = (Node*)arg;
     while(true){
+        if(quit){
+            break;
+        }
         std::cin.getline(buffer,900);
         std::string s = buffer;
         std::string fin = "quit";
         if(s.find(fin)!=std::string::npos){
             quit=true;
-            break;
+            //还是要让他把这个信号发过去
         }
         if(s.size()>1000){
             std::cout<<"输入过长，请重新输入"<<std::endl;
@@ -1014,7 +1039,7 @@ void *pthread_send(void* arg){
             std::cout<<"发送失败"<<std::endl;
             //std::cout<<errno<<std::endl;
         }else{
-            std::cout<<"发送成功"<<std::endl;
+            //std::cout<<"发送成功"<<std::endl;
         }
         memset(buffer,0,7500);
     }
@@ -1024,12 +1049,18 @@ void *pthread_send(void* arg){
 void *pthread_recv(void* arg){
     std::cout<<"成功创建接收线程"<<std::endl;
     char buffer[7500];
+    memset(buffer,0,7500);
     while(true){
         int ret = recv(sock,buffer,7500,0);
         if(ret>0){
             std::string s = buffer;
             //std::cout<<s<<std::endl;
             s = DecryptForTCP(s);
+            std::string fin = "quit";
+            if(s.find(fin)!=std::string::npos){
+            quit=true;
+        }
+            printf("Recv a Message from %s:%d ", oppo_ip.c_str(), oppo_port);
             std::cout<<s<<std::endl;
         }
         memset(buffer,0,7500);
@@ -1057,7 +1088,7 @@ int Clientmain(std::string s,int port){
         return 0;
     }
     //std::cout<<ret<<std::endl;
-    Node*node;
+    Node*node=new Node();
     node->server = serv_addr;
     node->fd = sock;
     pthread_t pthreadSend;
@@ -1080,8 +1111,8 @@ int Clientmain(std::string s,int port){
     char c;std::cin>>c;
     if(c=='S'||c=='s'){
         std::cout<<"Use 127.0.0.1 for ip_addr"<<std::endl;
-        std::cout<<"Use 6791 for port"<<std::endl;
-        Servermain("127.0.0.1",6792);
+        std::cout<<"Use 6796 for port"<<std::endl;
+        Servermain("127.0.0.1",6796);
     }
     if(c=='C'||c=='c'){
         std::string s;
@@ -1090,8 +1121,10 @@ int Clientmain(std::string s,int port){
         std::cin>>s;
         std::cout<<"Input server`s port"<<std::endl;
         std::cin>>port;
+        oppo_ip=s;
+        oppo_port=port;
         getchar();
-        Clientmain("127.0.0.1",6792);
+        Clientmain(s,port);
     }
     while(true){
         if(quit){
